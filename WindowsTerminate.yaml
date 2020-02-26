@@ -1,0 +1,122 @@
+AWSTemplateFormatVersion: '2010-09-09' 
+ 
+Description: Orchestrate activities when a Windows EC2 instance is terminated 
+ 
+Resources: 
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: !Sub |
+          import boto3
+          import json
+          def lambda_handler(event, context):
+          #    print(event)
+          #    print(event['detail']['instance-id'])
+              id = event['detail']['instance-id']
+              ec2 = boto3.resource('ec2')
+              instance = ec2.Instance(id)
+          #    print(instance.tags)
+              if instance.platform == "windows":
+                  print("WINDOWS!!!")
+                  hostname = 'Not found'
+                  for items in instance.tags:
+                      if items['Key'] == 'Hostname':
+                          hostname = items['Value']
+                  print(hostname)
+                  if hostname != 'Not found':
+                      response = event.copy()
+                      response['hostname'] = hostname
+                      print(response)
+                      sns = boto3.client('sns')
+                      arn = 'arn:aws:sns:ap-southeast-2:99999999999:WindowsTermination'
+                      sns.publish(
+                          TargetArn=arn,
+                          Message=json.dumps(response)
+                          )
+                      sqs = boto3.client('sqs')
+                      url = '	https://sqs.ap-southeast-2.amazonaws.com/99999999999/WindowsTermination'
+                      sqs.send_message(
+                          QueueUrl=url,
+                          MessageBody=json.dumps(response)
+                          )
+              return {
+                  'statusCode': 200,
+                  'hostname': hostname,
+              }               
+      Description: Retrieve Windows hostname and add to metadata
+      Handler: index.lambda_handler
+      MemorySize: 128
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python3.7
+      Timeout: 5
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: LambdaPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - ec2:Describe*
+            Resource: "*"
+          - Effect: Allow
+            Action:
+            - sns:Publish
+            Resource: arn:aws:sns:ap-southeast-2:99999999999:WindowsTermination
+          - Effect: Allow
+            Action:
+            - sqs:SendMessage
+            Resource: arn:aws:sqs:ap-southeast-2:99999999999:WindowsTermination
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: "*"
+
+
+  TerminationRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "Trigger Lambda function when EC2 instance is terminated"
+      EventPattern: 
+        source: 
+          - "aws.ec2"
+        detail-type:
+          - "EC2 Instance State-change Notification"
+        detail:
+          state:
+            - "terminated"
+      Targets: 
+        - 
+          Arn: 
+            Fn::GetAtt: 
+              - "LambdaFunction"
+              - "Arn"
+          Id: "TargetFunction"
+
+  PermissionForEventRuleToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: 
+        Ref: "LambdaFunction"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: 
+        Fn::GetAtt: 
+          - "TerminationRule"
+          - "Arn"
