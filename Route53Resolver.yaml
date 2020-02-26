@@ -1,0 +1,205 @@
+Description: Deploy Route 53 Resolver
+Parameters:
+
+  VpcCIDR1:
+    Description: Please enter the IP range (CIDR notation) for a VPC
+    AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
+    Type: String
+    Default: 10.10.0.0/16
+
+  VpcCIDR2:
+    Description: Please enter the IP range (CIDR notation) for a second VPC
+    AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
+    Type: String
+    Default: 10.20.0.0/16
+
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+    Default: PeterTest
+
+Resources:
+
+  VPC1:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR1
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-vpc1
+
+  VPC2:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR2
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-vpc2
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupName: Route53 Resolver Security Group
+      GroupDescription: Route53 Resolver Security Group
+      VpcId: !Ref VPC2
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-sg
+
+  PrivateSubnet1a:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC1
+      AvailabilityZone: ap-southeast-2a
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC1.CidrBlock, 3, 8 ]]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-sn1a
+
+  PrivateSubnet1b:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC1
+      AvailabilityZone: ap-southeast-2b
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt VPC1.CidrBlock, 3, 8 ]]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-sn1b
+
+  PrivateSubnet1c:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC1
+      AvailabilityZone: ap-southeast-2c
+      CidrBlock: !Select [ 2, !Cidr [ !GetAtt VPC1.CidrBlock, 3, 8 ]]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-sn1c
+
+  PrivateSubnet2a:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC2
+      AvailabilityZone: ap-southeast-2a
+      CidrBlock: !Select [ 0, !Cidr [ !GetAtt VPC2.CidrBlock, 3, 8 ]]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-sn2a
+
+  PrivateSubnet2b:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC2
+      AvailabilityZone: ap-southeast-2b
+      CidrBlock: !Select [ 1, !Cidr [ !GetAtt VPC2.CidrBlock, 3, 8 ]]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-sn2b
+
+  PrivateSubnet2c:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC2
+      AvailabilityZone: ap-southeast-2c
+      CidrBlock: !Select [ 2, !Cidr [ !GetAtt VPC2.CidrBlock, 3, 8 ]]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-sn2c
+
+  Outbound:
+    Type : AWS::Route53Resolver::ResolverEndpoint
+    Properties :
+      Direction : Outbound
+      IpAddresses : 
+        - SubnetId: !Ref PrivateSubnet2a
+        - SubnetId: !Ref PrivateSubnet2b
+      Name : PeterOutboundEndpoint
+      SecurityGroupIds : 
+        - !Ref SecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Ref EnvironmentName
+
+  Rule1:
+    Type : AWS::Route53Resolver::ResolverRule
+    Properties: 
+      Name: !Ref EnvironmentName
+      DomainName : aucustomer.corp
+      ResolverEndpointId : !Ref Outbound
+      RuleType : FORWARD 
+      TargetIps :
+        - Ip : 11.12.144.21
+        - Ip : 11.13.144.21    
+
+  Association1:
+    Type: AWS::Route53Resolver::ResolverRuleAssociation
+    Properties: 
+        Name: !Ref EnvironmentName
+        ResolverRuleId: !Ref Rule1
+        VPCId: !Ref VPC2
+
+  ResourceShare1:
+    Type: "AWS::RAM::ResourceShare"
+    Properties:
+      Name: "aucustomer.corp forwarder"
+      ResourceArns: 
+        - !GetAtt  Rule1.Arn
+      Principals: 
+        - "888888888888"
+      
+  Rule2:
+    Type : AWS::Route53Resolver::ResolverRule
+    Properties: 
+      Name: !Ref EnvironmentName
+      DomainName : customer.corp
+      ResolverEndpointId : !Ref Outbound
+      RuleType : FORWARD 
+      TargetIps :
+        - Ip : 11.12.144.21
+        - Ip : 11.13.144.21
+          
+  Association2:
+    Type: AWS::Route53Resolver::ResolverRuleAssociation
+    Properties: 
+        Name: !Ref EnvironmentName
+        ResolverRuleId: !Ref Rule2
+        VPCId: !Ref VPC2
+
+  ResourceShare2:
+    Type: "AWS::RAM::ResourceShare"
+    Properties:
+      Name: "customer.corp forwarder"
+      ResourceArns: 
+        - !GetAtt Rule2.Arn
+      Principals: 
+        - "888888888888"
+
+Outputs:
+
+  VPC:
+    Description: VPC
+    Value: !Ref VPC1
+
+  Outbound:
+    Description: Outbound
+    Value: !Ref Outbound
