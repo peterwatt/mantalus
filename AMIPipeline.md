@@ -1,6 +1,6 @@
 # AMI pipeline for Windows Servers
 
-The image pipeline is implemented using EC2 Image Builder in account  `customer-os-ondemand-services-mgmt`, account number `905619417025`.
+The image pipeline is implemented using EC2 Image Builder in account  `customer-os-ondemand-services-mgmt`, account number `999999999999`.
 
 ## Component *Install customer Components*
 
