@@ -1,7 +1,7 @@
-# mantalus
+# Mantalus
 Code samples for Mantalus review
 
-# Windows Server lifecycle for customer 
+## Windows Server lifecycle for customer 
  
 The Windows Server lifecycle has three stages: 
  
