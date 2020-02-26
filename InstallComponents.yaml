@@ -1,0 +1,82 @@
+name: Install customer Components
+description: Install standard customer components.
+schemaVersion: 1.0
+
+phases:
+  - name: build
+    steps:
+      - name: CreateFolder
+        action: ExecutePowerShell
+        inputs:
+          commands:
+            - New-Item -Path 'C:\customer\Software' -ItemType Directory  
+
+      - name: DownloadcustomerFiles
+        action: S3Download
+        inputs:
+            - source: s3://customer-ondemand/windows/Software/ami-prod/*
+              destination: C:\customer\Software\
+
+      - name: GetSecrets
+        action: ExecutePowerShell
+        inputs:
+          commands:
+            - $secret_manager = Get-SECSecretValue -SecretId 'Windows/ServiceAccounts/DomainJoin'
+            - $secret = $secret_manager.SecretString | ConvertFrom-Json
+            - $sa = 'aucustomer\' + $secret.ServiceAccount
+            - New-Item -Path HKLM:\Software -Name customer -Force
+            - Set-ItemProperty -Path HKLM:\Software\customer -Name ServiceAccount -Value $sa 
+            - Set-ItemProperty -Path HKLM:\Software\customer -Name Password -Value $secret.Password
+
+      - name: InstallDotnet86
+        action: ExecuteBinary
+        inputs:
+          path: C:\customer\Software\[osd-svr]_ms.visualc.2015.redist\VCRuntime140_x86.exe
+          arguments:
+            - /install
+            - /quiet
+            - /norestart
+
+      - name: InstallDotnet64
+        action: ExecuteBinary
+        inputs:
+          path: C:\customer\Software\[osd-svr]_ms.visualc.2015.redist\VCRuntime140_x64.exe
+          arguments:
+            - /install
+            - /quiet
+            - /norestart
+
+      - name: InstallFlexNet
+        action: ExecuteBinary
+        inputs:
+          path: msiexec.exe
+          arguments:
+            - /i 
+            - C:\customer\Software\FNMS_Agent_12.00.14540\FlexNet Inventory Agent.msi
+            - /qn
+
+      - name: RunPowerShellCommands
+        action: ExecutePowerShell
+        inputs:
+          commands:
+            - Install-WindowsFeature RSAT-AD-PowerShell
+            - Start-Process C:\customer\Software\MicrosoftLocalAdministratorPasswordSolution_Server_6.2.0.0_B01\install.vbs -Wait
+            - Start-Process C:\customer\Software\SymantecEndpointProtectionServercustomerSPx64_14.0.3897.1101_B01\install.vbs -Wait
+            - Start-Process C:\customer\Software\Splunk-Pilot\install.vbs -Wait
+            - tzutil /s "Aus Eastern Standard Time" 
+
+  - name: validate
+    steps:
+      - name: HelloWorldStep
+        action: ExecutePowerShell
+        inputs:
+          commands:
+            - echo "Hello World! Validate."
+
+  - name: test
+    steps:
+      - name: HelloWorldStep
+        action: ExecutePowerShell
+        inputs:
+          commands:
+            - echo "Hello World! Test."
