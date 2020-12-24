@@ -1,0 +1,47 @@
+env:
+  AWS_BUCKET: serra-sensor-salesforce-dev
+  AWS_REGION: ap-southeast-2
+  SERRANEW_HOST: https://salesforce.tst.serraview.com
+  SERRAVIEW_LICENSE: Elite
+  DD_TRACE_ENABLED: true
+  DD_TRACE_SERRANEW_SERVICE_NAME: serranew.rails.salesforce
+  DD_TRACE_SIDEKIQ_CLIENT_SERVICE_NAME: serranew.daemon.sidekiq.client.salesforce
+  DD_TRACE_SIDEKIQ_SERVICE_NAME: serranew.sidekiq.salesforce
+ingress:
+  host: salesforce.tst.serraview.com
+  class: nlb-nginx-ingress
+image:
+  repository: 185535608991.dkr.ecr.us-east-1.amazonaws.com/serranew-server
+  tag: develop-23417
+sidekiq:
+  env:
+    REDIS_URL: redis://sensor-gateway-redis-dev-au.c3ajva.ng.0001.apse2.cache.amazonaws.com:6379/1
+    REDIS_NAMESPACE: salesforce
+sensorGateway:
+  enabled: true
+  env:
+    SIDEKIQ_REDIS_URL: redis://sensor-gateway-redis-dev-au.c3ajva.ng.0001.apse2.cache.amazonaws.com:6379/0
+    SIDEKIQ_REDIS_NAMESPACE: salesforce
+    ACTIONCABLE_REDIS_URL: redis://sensor-gateway-redis-dev-au.c3ajva.ng.0001.apse2.cache.amazonaws.com:6379
+    ACTIONCABLE_REDIS_CHANNEL_PREFIX: actioncable-channel-salesforce
+    EXPORT_FLOORPLAN_IMG_SCALE: 0.0375
+  sensorVendors:
+    coworkr:
+      enabled: true
+      env:
+        # The token is only used in the test webhook to send
+        # mock/fake coworkr sensor event for testing/dev purpose,
+        # and the ENV var does NOT need to be set in prod environment.
+        #COWORKR_WEBHOOK_TOKEN: test
+  daemon:
+    enabled: true
+    path: coworkr_push_server_daemon
+  cronJobs:
+    sensorSync:
+      rakeTask: sensor_gateway:coworkr:sync_workpoints
+endpointMonitor:
+  enabled: true
+  # Comma separated list of tags
+  testTags: autst
+  # Comma separated list of Node Location IDs, https://app.statuscake.com/API/Locations/json
+  nodeLocations: AU1,AU5,au2,au3,AU4,AU6
